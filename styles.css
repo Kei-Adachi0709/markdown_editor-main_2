@@ -3962,3 +3962,25 @@ body[data-theme="dark"] .cm-content .cm-highlightSpace {
 .cm-hide-marker {
     display: none;
 }
+
+/* styles.css */
+
+/* ドラッグ可能なタブのカーソルを変更 */
+.tab {
+    cursor: grab;
+}
+
+.tab:active {
+    cursor: grabbing;
+}
+
+/* ドラッグ中のタブのスタイル（半透明にするなど） */
+.tab.dragging {
+    opacity: 0.5;
+    background-color: #444; /* 暗めの色にして目立たせる */
+    border: 1px dashed #666;
+}
+
+.tab[draggable="true"] {
+    cursor: grab;
+}

@@ -210,6 +210,59 @@ let appSettings = {
     }
 };
 
+// ========== タブ移動（ドラッグ＆ドロップ）機能 ==========
+
+// 1. タブのコンテナにドロップ受け入れ処理を追加
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('editor-tabs');
+    if (container) {
+        container.addEventListener('dragover', (e) => {
+            e.preventDefault(); // これが重要：ドロップを許可する
+            const afterElement = getDragAfterElement(container, e.clientX);
+            const draggable = document.querySelector('.tab.dragging');
+            
+            if (draggable) {
+                if (afterElement == null) {
+                    container.appendChild(draggable);
+                } else {
+                    container.insertBefore(draggable, afterElement);
+                }
+            }
+        });
+    }
+});
+
+// 2. ドロップ位置を計算するヘルパー関数
+function getDragAfterElement(container, x) {
+    const draggableElements = [...container.querySelectorAll('.tab:not(.dragging)')];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// 3. 各タブにドラッグ機能を有効化する関数（これを後で呼び出します）
+function enableTabDragging(tabElement) {
+    tabElement.setAttribute('draggable', 'true');
+
+    tabElement.addEventListener('dragstart', (e) => {
+        tabElement.classList.add('dragging');
+        // Firefox対応: データ転送を設定しないとドラッグできない場合がある
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tabElement.dataset.filepath || 'virtual'); 
+    });
+
+    tabElement.addEventListener('dragend', () => {
+        tabElement.classList.remove('dragging');
+    });
+}
 // ========== Command Registry ==========
 const COMMANDS_REGISTRY = [
     // --- Global Commands ---
@@ -1048,7 +1101,6 @@ function getAvailableUntitledNumber() {
 function createNewTab() {
     // 空き番号を取得
     const nextNumber = getAvailableUntitledNumber();
-
     const fileName = `Untitled-${nextNumber}`;
     const virtualPath = fileName; // パスとして仮の名前を使用
 
@@ -1070,7 +1122,8 @@ function createNewTab() {
     tab.dataset.filepath = virtualPath;
     // ● (未保存マーク) を最初からつけておく
     tab.innerHTML = `${fileName} ● <span class="close-tab" data-filepath="${virtualPath}">×</span>`;
-
+    // ★★★ この行を追加 ★★★
+    enableTabDragging(tab);
     // タブコンテナに追加
     if (editorTabsContainer) {
         editorTabsContainer.appendChild(tab);
@@ -6607,6 +6660,8 @@ async function openFile(filePath, fileName) {
             tab.className = 'tab';
             tab.dataset.filepath = normalizedPath;
             tab.innerHTML = `<span class="tab-filename">${fileName}</span> <span class="close-tab" data-filepath="${normalizedPath}">×</span>`;
+            // ★★★ この行を追加 ★★★
+            enableTabDragging(tab);
             editorTabsContainer.appendChild(tab);
 
             // type情報を保存
@@ -6637,6 +6692,9 @@ function showWelcomeReadme() {
     tab.className = 'tab';
     tab.dataset.filepath = readmePath;
     tab.innerHTML = `README.md`;
+
+    // ★★★ この行を追加 ★★★
+    enableTabDragging(tab);
 
     if (editorTabsContainer) {
         editorTabsContainer.appendChild(tab);
