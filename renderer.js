@@ -210,6 +210,63 @@ let appSettings = {
     }
 };
 
+// ========== 画面分割機能 (CodeMirror版) ==========
+
+let splitEditorView = null; // 2つ目のエディタ
+let isSplitView = false;    // 分割状態
+
+// 分割ボタンのイベント設定（DOM読み込み時）
+document.addEventListener('DOMContentLoaded', () => {
+    const splitBtn = document.getElementById('btn-split');
+    if (splitBtn) {
+        // ボタンクリック時は、現在のファイルを右に開く
+        splitBtn.addEventListener('click', () => {
+            if (currentFilePath) openInSplitView(currentFilePath);
+        });
+    }
+});
+
+/**
+ * 指定したファイルを右側の分割エディタで開く関数
+ */
+function openInSplitView(filePath) {
+    const mainEditorDiv = document.getElementById('editor');
+    const splitEditorDiv = document.getElementById('editor-split');
+    
+    // まだ分割されていない場合、レイアウトを変更
+    if (!isSplitView) {
+        isSplitView = true;
+        mainEditorDiv.style.width = '50%';
+        splitEditorDiv.style.display = 'block';
+        splitEditorDiv.style.width = '50%';
+    }
+
+    // ファイル内容の取得
+    const fileData = openedFiles.get(filePath);
+    let content = '';
+    if (fileData) {
+        content = fileData.content || '';
+    } else {
+        content = 'Loading...'; 
+    }
+
+    // 右側エディタの作成または更新
+    if (!splitEditorView) {
+        // 新規作成
+        // createEditorState は既存の関数を再利用します
+        const state = createEditorState(content, filePath);
+        
+        splitEditorView = new EditorView({
+            state: state,
+            parent: splitEditorDiv
+        });
+    } else {
+        // 既存エディタの内容更新
+        const newState = createEditorState(content, filePath);
+        splitEditorView.setState(newState);
+    }
+}
+
 // ========== タブ移動（ドラッグ＆ドロップ）機能 ==========
 
 // 1. タブのコンテナにドロップ受け入れ処理を追加
@@ -1752,6 +1809,23 @@ const dropHandler = EditorView.domEventHandlers({
     },
     drop(event, view) {
         const { dataTransfer } = event;
+
+        // ★★★ 追加: タブがドロップされた場合の処理 ★★★
+        const tabPath = dataTransfer.getData('application/x-markdown-tab');
+        if (tabPath) {
+            event.preventDefault();
+            
+            // 分割モードがOFFなら、分割して右側に開く
+            if (!isSplitView) {
+                openInSplitView(tabPath);
+            } else {
+                // 既に分割されている場合は、ドロップされた側のエディタで開く
+                // (今回は簡易的に「右側で開く」挙動に統一しますが、必要なら分岐できます)
+                openInSplitView(tabPath); 
+            }
+            return true;
+        }
+        // ------------------------------------------------
 
         // -------------------------------------------------
         // ケース1: ファイルがドロップされた場合 (ローカルファイル)
