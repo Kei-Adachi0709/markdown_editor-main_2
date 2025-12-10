@@ -254,9 +254,11 @@ function enableTabDragging(tabElement) {
 
     tabElement.addEventListener('dragstart', (e) => {
         tabElement.classList.add('dragging');
-        // Firefox対応: データ転送を設定しないとドラッグできない場合がある
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', tabElement.dataset.filepath || 'virtual'); 
+        
+        // 【修正】ここを 'text/plain' から変更しました
+        // これでエディタに文字として貼り付けられるのを防ぎます
+        e.dataTransfer.setData('application/x-markdown-tab', tabElement.dataset.filepath || ''); 
     });
 
     tabElement.addEventListener('dragend', () => {
