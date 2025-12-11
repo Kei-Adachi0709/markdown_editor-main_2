@@ -3984,3 +3984,9 @@ body[data-theme="dark"] .cm-content .cm-highlightSpace {
 .tab[draggable="true"] {
     cursor: grab;
 }
+
+/* アクティブなエディタを目立たせる */
+.active-editor-pane {
+    box-shadow: inset 0 0 0 2px #007acc !important; /* 青い枠線 */
+    transition: box-shadow 0.2s;
+}

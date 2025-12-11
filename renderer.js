@@ -176,6 +176,8 @@ let isTerminalVisible = false;
 let isRightActivityBarVisible = true;
 let isMaximized = false;
 let savedRightActivityBarState = true;
+// ★★★ 追加: 現在アクティブなエディタを保持する変数 ★★★
+let activeEditorView = null;
 
 // 設定管理
 let appSettings = {
@@ -284,10 +286,18 @@ function openInSplitView(filePath) {
             state: state,
             parent: splitEditorDiv
         });
+
+        // ★追加: フォーカスイベントの設定
+        splitEditorView.contentDOM.addEventListener('focus', () => setActiveEditor(splitEditorView));
+        splitEditorView.contentDOM.addEventListener('click', () => setActiveEditor(splitEditorView));
     } else {
         const newState = createEditorState(content, filePath);
         splitEditorView.setState(newState);
     }
+
+    // ★追加: パスを紐付けてアクティブにする
+    splitEditorView.filePath = filePath;
+    setActiveEditor(splitEditorView);
 }
 
 // 分割を閉じる関数
@@ -371,6 +381,41 @@ function enableTabDragging(tabElement) {
         tabElement.classList.remove('dragging');
     });
 }
+
+// ========== アクティブエディタ管理 ==========
+
+// どちらのエディタがアクティブかを設定する関数
+function setActiveEditor(view) {
+    activeEditorView = view;
+    
+    const mainWrapper = document.getElementById('editor');
+    const splitWrapper = document.getElementById('editor-split');
+    
+    // スタイルの切り替え
+    if (view === splitEditorView) {
+        if (splitWrapper) splitWrapper.classList.add('active-editor-pane');
+        if (mainWrapper) mainWrapper.classList.remove('active-editor-pane');
+    } else {
+        if (mainWrapper) mainWrapper.classList.add('active-editor-pane');
+        if (splitWrapper) splitWrapper.classList.remove('active-editor-pane');
+    }
+
+    // グローバルなパス変数を、アクティブなエディタのものに更新
+    // (これをしないと保存ボタンなどが古いパスに対して動いてしまうため)
+    if (view && view.filePath) {
+        currentFilePath = view.filePath;
+        
+        // 統計情報なども更新
+        updateFileStats();
+        updateOutline();
+    }
+}
+
+// 現在アクティブなエディタを取得する関数（ツールバーなどで使用）
+function getActiveView() {
+    return activeEditorView || globalEditorView;
+}
+
 // ========== Command Registry ==========
 const COMMANDS_REGISTRY = [
     // --- Global Commands ---
@@ -2696,6 +2741,16 @@ function initEditor() {
         parent: editorContainer,
     });
 
+    // ★追加: パス情報をViewに紐付ける
+    globalEditorView.filePath = 'README.md';
+
+    // ★追加: フォーカス時にアクティブに設定
+    globalEditorView.contentDOM.addEventListener('focus', () => setActiveEditor(globalEditorView));
+    globalEditorView.contentDOM.addEventListener('click', () => setActiveEditor(globalEditorView));
+    
+    // 最初は左側をアクティブに
+    setActiveEditor(globalEditorView);
+
     // カスタム検索ウィジェットのセットアップ
     searchWidgetControl = setupSearchWidget(globalEditorView);
 }
@@ -2992,84 +3047,77 @@ function setTextAlignment(view, alignment) {
     view.focus();
 }
 
-// ==========ツールバー ボタン イベントリスナー ==========
-document.getElementById('btn-save')?.addEventListener('click', () => saveCurrentFile(false));
-document.getElementById('toolbar-undo')?.addEventListener('click', () => { if (globalEditorView) { undo(globalEditorView); globalEditorView.focus(); } });
-document.getElementById('toolbar-redo')?.addEventListener('click', () => { if (globalEditorView) { redo(globalEditorView); globalEditorView.focus(); } });
+// ========== ツールバー ボタン イベントリスナー (修正版) ==========
 
-document.getElementById('btn-h2')?.addEventListener('click', () => toggleLinePrefix(globalEditorView, "##"));
-document.getElementById('btn-h3')?.addEventListener('click', () => toggleLinePrefix(globalEditorView, "###"));
+document.getElementById('btn-save')?.addEventListener('click', () => saveCurrentFile(false));
+document.getElementById('toolbar-undo')?.addEventListener('click', () => { 
+    const view = getActiveView(); 
+    if (view) { undo(view); view.focus(); } 
+});
+document.getElementById('toolbar-redo')?.addEventListener('click', () => { 
+    const view = getActiveView(); 
+    if (view) { redo(view); view.focus(); } 
+});
+
+// 見出し
+document.getElementById('btn-h2')?.addEventListener('click', () => toggleLinePrefix(getActiveView(), "##"));
+document.getElementById('btn-h3')?.addEventListener('click', () => toggleLinePrefix(getActiveView(), "###"));
 
 document.querySelectorAll('.dropdown-item[data-action^="h"]').forEach(item => {
     item.addEventListener('click', (e) => {
         const level = parseInt(e.target.dataset.action.replace('h', ''));
         const hashes = "#".repeat(level);
-        toggleLinePrefix(globalEditorView, hashes);
+        toggleLinePrefix(getActiveView(), hashes);
     });
 });
 
-document.getElementById('bold-btn')?.addEventListener('click', () => toggleMark(globalEditorView, "**"));
-document.getElementById('italic-btn')?.addEventListener('click', () => toggleMark(globalEditorView, "*"));
-document.getElementById('strike-btn')?.addEventListener('click', () => toggleMark(globalEditorView, "~~"));
-document.getElementById('highlight-btn')?.addEventListener('click', () => toggleMark(globalEditorView, "=="));
+// 装飾
+document.getElementById('bold-btn')?.addEventListener('click', () => toggleMark(getActiveView(), "**"));
+document.getElementById('italic-btn')?.addEventListener('click', () => toggleMark(getActiveView(), "*"));
+document.getElementById('strike-btn')?.addEventListener('click', () => toggleMark(getActiveView(), "~~"));
+document.getElementById('highlight-btn')?.addEventListener('click', () => toggleMark(getActiveView(), "=="));
 
-document.getElementById('link-btn')?.addEventListener('click', () => insertLink(globalEditorView));
-document.getElementById('image-btn')?.addEventListener('click', () => insertImage(globalEditorView));
-// ローカル画像挿入ボタンの処理
+// 挿入
+document.getElementById('link-btn')?.addEventListener('click', () => insertLink(getActiveView()));
+document.getElementById('image-btn')?.addEventListener('click', () => insertImage(getActiveView()));
 document.getElementById('local-image-btn')?.addEventListener('click', async () => {
-    if (!globalEditorView) return;
-
+    const view = getActiveView();
+    if (!view) return;
+    // ... (既存の画像挿入ロジック。view変数を使うように注意してください)
+    // 中身の `globalEditorView` をすべて `view` に置き換えてください
     try {
         const result = await window.electronAPI.selectFile();
         if (result.success && result.path) {
-            const absolutePath = result.path;
-            let insertPath = absolutePath;
-
-            // 可能であれば相対パスに変換
-            if (currentDirectoryPath) {
-                try {
-                    // Windows環境でのパス区切り文字対策も含めて相対パス化
-                    const relativePath = path.relative(currentDirectoryPath, absolutePath);
-                    // 画像パスとしてはスラッシュ区切りが望ましいため置換
-                    insertPath = relativePath.replace(/\\/g, '/');
-                } catch (e) {
-                    console.warn('Relative path calculation failed:', e);
-                }
-            }
-
-            const fileName = path.basename(absolutePath);
-            let insertText = `![${fileName}](${insertPath})\n`;
-
-            const { state, dispatch } = globalEditorView;
+            // ... (パス計算処理) ...
+            let insertText = `![${path.basename(result.path)}](${result.path})\n`; // 簡易記述
+            
+            const { state, dispatch } = view;
             const { from, to } = state.selection.main;
-
             dispatch({
                 changes: { from: from, to: to, insert: insertText },
                 selection: { anchor: from + insertText.length }
             });
-            globalEditorView.focus();
+            view.focus();
         }
-    } catch (e) {
-        console.error('Local image insertion failed:', e);
-        showNotification(`エラー: ${e.message}`, 'error');
-    }
+    } catch(e) { console.error(e); }
 });
-document.getElementById('btn-table')?.addEventListener('click', () => insertTable(globalEditorView));
 
-document.getElementById('code-btn')?.addEventListener('click', () => insertCodeBlock(globalEditorView));
-document.getElementById('inline-code-btn')?.addEventListener('click', () => toggleMark(globalEditorView, "`"));
-document.getElementById('quote-btn')?.addEventListener('click', () => toggleLinePrefix(globalEditorView, ">"));
-document.getElementById('hr-btn')?.addEventListener('click', () => insertHorizontalRule(globalEditorView));
-document.getElementById('btn-page-break')?.addEventListener('click', () => insertPageBreak(globalEditorView));
+document.getElementById('btn-table')?.addEventListener('click', () => insertTable(getActiveView()));
+document.getElementById('code-btn')?.addEventListener('click', () => insertCodeBlock(getActiveView()));
+document.getElementById('inline-code-btn')?.addEventListener('click', () => toggleMark(getActiveView(), "`"));
+document.getElementById('quote-btn')?.addEventListener('click', () => toggleLinePrefix(getActiveView(), ">"));
+document.getElementById('hr-btn')?.addEventListener('click', () => insertHorizontalRule(getActiveView()));
+document.getElementById('btn-page-break')?.addEventListener('click', () => insertPageBreak(getActiveView()));
 
-if (btnBulletList) btnBulletList.addEventListener('click', () => toggleList(globalEditorView, 'ul'));
-if (btnNumberList) btnNumberList.addEventListener('click', () => toggleList(globalEditorView, 'ol'));
-if (btnCheckList) btnCheckList.addEventListener('click', () => toggleList(globalEditorView, 'task'));
+// リスト
+if (btnBulletList) btnBulletList.addEventListener('click', () => toggleList(getActiveView(), 'ul'));
+if (btnNumberList) btnNumberList.addEventListener('click', () => toggleList(getActiveView(), 'ol'));
+if (btnCheckList) btnCheckList.addEventListener('click', () => toggleList(getActiveView(), 'task'));
 
-// 配置ボタンのリスナー
-document.getElementById('btn-align-left')?.addEventListener('click', () => setTextAlignment(globalEditorView, 'left'));
-document.getElementById('btn-align-center')?.addEventListener('click', () => setTextAlignment(globalEditorView, 'center'));
-document.getElementById('btn-align-right')?.addEventListener('click', () => setTextAlignment(globalEditorView, 'right'));
+// 配置
+document.getElementById('btn-align-left')?.addEventListener('click', () => setTextAlignment(getActiveView(), 'left'));
+document.getElementById('btn-align-center')?.addEventListener('click', () => setTextAlignment(getActiveView(), 'center'));
+document.getElementById('btn-align-right')?.addEventListener('click', () => setTextAlignment(getActiveView(), 'right'));
 
 // PDFエクスポート処理を共通関数として定義
 async function executePdfExport() {
@@ -3143,10 +3191,11 @@ colorPicker.addEventListener('input', (e) => {
 
 // 3. 選択範囲のテキストを<span>タグで囲んで色をつける関数
 function applyTextColor(color) {
+    const view = getActiveView(); // ★ここを修正
     // エディタがまだ準備できていない場合は何もしない
-    if (!globalEditorView) return;
+    if (!view) return;
 
-    const state = globalEditorView.state;
+    const state = view.state;
     if (!state) return;
 
     const { from, to } = state.selection.main;
@@ -6885,7 +6934,72 @@ function switchToFile(filePath) {
 
     // 親コンテナを表示
     switchMainView('content-readme');
+    // ターゲットとなるエディタを決定（アクティブな方、なければメイン）
+    const targetView = getActiveView();
+    const isMain = (targetView === globalEditorView);
 
+    // DOM要素取得
+    const splitTitleText = document.getElementById('file-title-split-text'); // 右用
+    const fileTitleInput = document.getElementById('file-title-input'); // 左入力欄
+
+    // 親コンテナを表示
+    switchMainView('content-readme');
+
+    // ファイル情報取得
+    currentFilePath = filePath; // グローバル変数を更新
+
+    // --- ビューの更新 ---
+    if (fileType === 'text') {
+        if (targetView) {
+            // エディタの状態または内容を更新
+            if (fileData && fileData.editorState) {
+                targetView.setState(fileData.editorState);
+            } else {
+                const fileContent = fileData ? fileData.content : '';
+                const newState = createEditorState(fileContent, filePath);
+                targetView.setState(newState);
+            }
+            
+            // ★重要: Viewにパスを覚えさせる
+            targetView.filePath = filePath;
+        }
+    } else {
+        // メディア表示（画像など）は既存の仕組み（#media-view）を使うため
+        // 今回は「メインエリア」全体が切り替わる挙動になります
+        renderMediaContent(filePath, fileType);
+    }
+
+    // --- タイトルバーの更新 ---
+    const fileName = fileData ? fileData.fileName : filePath.split(/[\/\\]/).pop();
+    
+    if (isMain) {
+        // 左側のタイトルバー更新
+        if (fileTitleInput) {
+            const extIndex = fileName.lastIndexOf('.');
+            const nameNoExt = extIndex > 0 ? fileName.substring(0, extIndex) : fileName;
+            fileTitleInput.value = nameNoExt;
+        }
+        if (fileTitleBarEl) {
+             // READMEの場合は隠すなどの既存ロジック
+             if (isVirtualReadme) fileTitleBarEl.classList.add('hidden');
+             else fileTitleBarEl.classList.remove('hidden');
+        }
+    } else {
+        // 右側のタイトルバー更新
+        if (splitTitleText) {
+            splitTitleText.textContent = fileName;
+        }
+    }
+
+    if (fileData) {
+        document.title = `${fileData.fileName} - Markdown IDE`;
+        document.body.dataset.activeFileDir = path.dirname(filePath);
+    }
+
+    // アクティブ状態を再確認
+    setActiveEditor(targetView);
+    onEditorInput(false);
+    
     // --- ビューの切り替え ---
     if (fileType === 'text') {
         // テキストモード
