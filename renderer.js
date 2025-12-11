@@ -227,18 +227,37 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * 指定したファイルを右側の分割エディタで開く関数
+ * 指定したファイルを右側の分割エディタで開く関数（タイトルバー分割対応版）
  */
 function openInSplitView(filePath) {
     const mainEditorDiv = document.getElementById('editor');
     const splitEditorDiv = document.getElementById('editor-split');
     
+    // タイトルバー要素
+    const mainTitleBar = document.getElementById('file-title-bar');
+    const splitTitleBar = document.getElementById('file-title-bar-split');
+    const splitTitleText = document.getElementById('file-title-split-text');
+
     // まだ分割されていない場合、レイアウトを変更
     if (!isSplitView) {
         isSplitView = true;
+        
+        // エディタエリアを分割
         mainEditorDiv.style.width = '50%';
         splitEditorDiv.style.display = 'block';
         splitEditorDiv.style.width = '50%';
+
+        // タイトルバーを分割表示
+        if (mainTitleBar) {
+            mainTitleBar.style.flex = '1';
+            mainTitleBar.style.width = '50%'; // 明示的に幅指定
+            mainTitleBar.style.borderRight = '1px solid var(--sidebar-border)';
+        }
+        if (splitTitleBar) {
+            splitTitleBar.style.display = 'flex'; // flexで表示
+            splitTitleBar.style.width = '50%';
+            splitTitleBar.classList.remove('hidden');
+        }
     }
 
     // ファイル内容の取得
@@ -250,20 +269,50 @@ function openInSplitView(filePath) {
         content = 'Loading...'; 
     }
 
+    // 右側のタイトルバーにファイル名を表示
+    if (splitTitleText) {
+        // パスからファイル名だけを抽出
+        const fileName = filePath.split(/[/\\]/).pop();
+        splitTitleText.textContent = fileName;
+        splitTitleText.title = filePath; // ホバーでフルパス表示
+    }
+
     // 右側エディタの作成または更新
     if (!splitEditorView) {
-        // 新規作成
-        // createEditorState は既存の関数を再利用します
         const state = createEditorState(content, filePath);
-        
         splitEditorView = new EditorView({
             state: state,
             parent: splitEditorDiv
         });
     } else {
-        // 既存エディタの内容更新
         const newState = createEditorState(content, filePath);
         splitEditorView.setState(newState);
+    }
+}
+
+// 分割を閉じる関数
+function closeSplitView() {
+    if (!isSplitView) return;
+    
+    isSplitView = false;
+    
+    const mainEditorDiv = document.getElementById('editor');
+    const splitEditorDiv = document.getElementById('editor-split');
+    const mainTitleBar = document.getElementById('file-title-bar');
+    const splitTitleBar = document.getElementById('file-title-bar-split');
+
+    // レイアウトを元に戻す
+    mainEditorDiv.style.width = '100%';
+    splitEditorDiv.style.display = 'none';
+    splitEditorDiv.style.width = '0%';
+
+    // タイトルバーを元に戻す
+    if (mainTitleBar) {
+        mainTitleBar.style.width = '100%';
+        mainTitleBar.style.borderRight = 'none';
+    }
+    if (splitTitleBar) {
+        splitTitleBar.style.display = 'none';
     }
 }
 

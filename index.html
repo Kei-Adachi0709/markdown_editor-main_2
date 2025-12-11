@@ -403,11 +403,15 @@
 
             <!-- 中央ペイン（エディタ） -->
             <div class="center-pane" id="center-pane">
-                <!-- ファイルタイトル入力バー -->
-                <div class="file-title-bar hidden" id="file-title-bar">
-                    <input type="text" id="file-title-input" class="file-title-input" placeholder="ファイル名"
-                        spellcheck="false">
-                </div>
+                <div style="display: flex; width: 100%; overflow: hidden;">
+    <div class="file-title-bar hidden" id="file-title-bar" style="flex: 1; border-right: 1px solid transparent;">
+        <input type="text" id="file-title-input" class="file-title-input" placeholder="ファイル名" spellcheck="false">
+    </div>
+
+    <div class="file-title-bar hidden" id="file-title-bar-split" style="flex: 1; display: none; border-left: 1px solid var(--sidebar-border); padding-left: 10px; align-items: center; background-color: var(--main-bg);">
+        <span id="file-title-split-text" style="font-size: 12px; color: var(--text-color); opacity: 0.8;"></span>
+    </div>
+</div>
 
                 <!-- 拡張ツールバー -->
                 <div class="toolbar">
