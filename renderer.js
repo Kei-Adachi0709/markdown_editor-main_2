@@ -217,17 +217,6 @@ let appSettings = {
 let splitEditorView = null; // 2つ目のエディタ
 let isSplitView = false;    // 分割状態
 
-// 分割ボタンのイベント設定（DOM読み込み時）
-document.addEventListener('DOMContentLoaded', () => {
-    const splitBtn = document.getElementById('btn-split');
-    if (splitBtn) {
-        // ボタンクリック時は、現在のファイルを右に開く
-        splitBtn.addEventListener('click', () => {
-            if (currentFilePath) openInSplitView(currentFilePath);
-        });
-    }
-});
-
 /**
  * 指定したファイルを右側の分割エディタで開く関数（タイトルバー分割対応版）
  */
@@ -327,22 +316,13 @@ function closeSplitView() {
 
 // ========== タブ移動（ドラッグ＆ドロップ）機能 ==========
 
-// 1. タブのコンテナにドロップ受け入れ処理を追加
+// 分割ボタンのイベント設定（DOM読み込み時）
 document.addEventListener('DOMContentLoaded', () => {
-    const container = document.getElementById('editor-tabs');
-    if (container) {
-        container.addEventListener('dragover', (e) => {
-            e.preventDefault(); // これが重要：ドロップを許可する
-            const afterElement = getDragAfterElement(container, e.clientX);
-            const draggable = document.querySelector('.tab.dragging');
-            
-            if (draggable) {
-                if (afterElement == null) {
-                    container.appendChild(draggable);
-                } else {
-                    container.insertBefore(draggable, afterElement);
-                }
-            }
+    const splitBtn = document.getElementById('btn-split');
+    if (splitBtn) {
+        // ボタンクリック時は、現在のファイルを右に開く
+        splitBtn.addEventListener('click', () => {
+            if (currentFilePath) openInSplitView(currentFilePath);
         });
     }
 });
@@ -5772,13 +5752,24 @@ document.addEventListener('mousemove', (e) => {
         // 最小幅・最大幅の制限 (例: 150px ~ 600px)
         if (newWidth < 160) newWidth = 160;
         if (newWidth > 600) newWidth = 600;
-
         const widthStr = newWidth + 'px';
-
         // CSS変数を更新して幅を変更
         document.documentElement.style.setProperty('--leftpane-width', widthStr);
         // トップバーの左側コントロール幅も同期させる
         document.documentElement.style.setProperty('--current-left-pane-width', widthStr);
+        // 左側のリサイズ処理、または閉じるボタンの処理内
+
+if (newWidth <= 0) {
+    // 左側を完全に隠す
+    leftPane.style.width = '0px';
+    leftPane.style.display = 'none'; // 完全に消す
+
+    // ★ここが重要：右側（メインコンテンツ）を全画面に広げる
+    // もし右側が absolute配置なら left: 0; width: 100%;
+    // もし flexboxなら flex: 1; など
+    rightPane.style.width = '100%'; 
+    rightPane.style.marginLeft = '0px'; // マージンをリセット
+}
     }
 
     if (isResizingRight && resizerRight) {
@@ -6807,6 +6798,36 @@ async function renderMediaContent(filePath, type) {
     }
 }
 
+// ========== アクティブな画面（左右）の判定処理（修正版） ==========
+let activePane = 'left'; // 初期値
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. IDの候補をいくつか試して、見つかった方を使う
+    // ※あなたのコードに合わせて 'center-pane', 'right-pane' などを優先しています
+    const leftContainer = document.getElementById('editor-container') || document.querySelector('.center-pane') || document.getElementById('center-pane');
+    const rightContainer = document.getElementById('preview-pane') || document.querySelector('.right-pane') || document.getElementById('right-pane');
+
+    // 2. 左側の要素が見つかった場合のみイベントを設定
+    if (leftContainer) {
+        leftContainer.addEventListener('mousedown', () => {
+            activePane = 'left';
+            // console.log('Active: LEFT');
+        });
+    } else {
+        console.log('警告: 左側の判定用要素が見つかりませんでした (IDを確認してください)');
+    }
+
+    // 3. 右側の要素が見つかった場合のみイベントを設定
+    if (rightContainer) {
+        rightContainer.addEventListener('mousedown', () => {
+            activePane = 'right';
+            // console.log('Active: RIGHT');
+        });
+    } else {
+        console.log('警告: 右側の判定用要素が見つかりませんでした (IDを確認してください)');
+    }
+});
+
 async function openFile(filePath, fileName) {
     // パスを正規化して統一
     const normalizedPath = path.resolve(filePath);
@@ -6823,7 +6844,8 @@ async function openFile(filePath, fileName) {
         let tab = document.querySelector(`[data-filepath="${CSS.escape(normalizedPath)}"]`);
 
         if (tab) {
-            switchToFile(normalizedPath);
+            // ★★★ 変更点 1: activePane を引数に追加 ★★★
+            switchToFile(normalizedPath, activePane);
             return;
         }
 
@@ -6855,6 +6877,7 @@ async function openFile(filePath, fileName) {
             tab.innerHTML = `<span class="tab-filename">${fileName}</span> <span class="close-tab" data-filepath="${normalizedPath}">×</span>`;
             // ★★★ この行を追加 ★★★
             enableTabDragging(tab);
+            // ★ 将来的に「右側のタブバー」を作る場合は、ここで activePane を見て appendChild 先を変えます
             editorTabsContainer.appendChild(tab);
 
             // type情報を保存
@@ -6864,8 +6887,8 @@ async function openFile(filePath, fileName) {
                 type: fileType
             });
         }
-
-        switchToFile(normalizedPath);
+        // ★★★ 変更点 2: ここでも activePane を引数に追加 ★★★
+        switchToFile(normalizedPath, activePane);
     } catch (error) {
         console.error('Failed to open file:', error);
     }
@@ -6907,7 +6930,7 @@ function closeWelcomeReadme() {
     }
 }
 
-function switchToFile(filePath) {
+function switchToFile(filePath, targetPane = 'left') {
     // 古いパスを保存
     const previouslyActivePath = currentFilePath;
 
@@ -6915,6 +6938,17 @@ function switchToFile(filePath) {
     if (autoSaveTimer) {
         clearTimeout(autoSaveTimer);
         autoSaveTimer = null;
+    }
+    const fileData = openedFiles.get(filePath);
+    if (!fileData) return;
+
+    if (targetPane === 'right') {
+        // 右側のエディタにセットする処理
+        // 例: rightEditor.setValue(fileData.content);
+        // 例: document.getElementById('right-preview').innerHTML = ...
+    } else {
+        // 左側（メイン）のエディタにセットする処理
+        // 例: editor.setValue(fileData.content);
     }
 
     // 1. 現在開いているファイルの状態を保存する (テキストファイルの場合のみ)
@@ -6938,7 +6972,6 @@ function switchToFile(filePath) {
 
     // 3. パスを更新し、処理を継続
     currentFilePath = filePath;
-    const fileData = openedFiles.get(filePath);
     const fileType = fileData ? (fileData.type || 'text') : getFileType(filePath);
 
     // 仮想的なREADME.mdかどうかを判定する
