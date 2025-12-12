@@ -1915,13 +1915,13 @@ const dropHandler = EditorView.domEventHandlers({
             }
         }
     },
-    
+
     // ドラッグしてエディタ上を動いている時
     dragover(event, view) {
         // タブを持っている場合
         if (event.dataTransfer.types.includes('application/x-markdown-tab')) {
             event.preventDefault();
-            // クラスが外れていたら付け直す（念のため）
+            // クラスが外れていたら付け直す
             if (!isSplitView) {
                 if (!view.dom.classList.contains('editor-drag-preview-split')) {
                     view.dom.classList.add('editor-drag-preview-split');
@@ -1933,15 +1933,13 @@ const dropHandler = EditorView.domEventHandlers({
             }
             return true;
         }
-        return false; // 他のドラッグ（ファイルなど）は下の処理へ
+        return false;
     },
 
     // ドラッグがエディタから出た時
     dragleave(event, view) {
-        // ※重要: マウスがエディタ内の文字要素に入っただけでもleaveが発生するので、
-        // 本当にエディタの外に出たのかをチェックします
         if (event.relatedTarget && view.dom.contains(event.relatedTarget)) {
-            return; // まだエディタの中にいるので何もしない
+            return;
         }
         view.dom.classList.remove('editor-drag-over');
         view.dom.classList.remove('editor-drag-preview-split');
@@ -1949,21 +1947,31 @@ const dropHandler = EditorView.domEventHandlers({
 
     // ドロップされた時
     drop(event, view) {
-        // まずハイライトを消す
         view.dom.classList.remove('editor-drag-over');
         view.dom.classList.remove('editor-drag-preview-split');
         const { dataTransfer } = event;
 
-        // ★★★ ケース1: タブがドロップされた場合 ★★★
+        // ケース1: タブがドロップされた場合
         const tabPath = dataTransfer.getData('application/x-markdown-tab');
         if (tabPath) {
             event.preventDefault();
-            // 分割して開く（前回の実装済み関数）
-            openInSplitView(tabPath);
+
+            // ドロップ先がメインエディタ(左)かスプリットエディタ(右)かを判定
+            if (view === globalEditorView) {
+                // 左側にドロップ -> 全画面(メイン)に戻す
+                setActiveEditor(globalEditorView);
+                switchToFile(tabPath);
+                if (isSplitView) {
+                    closeSplitView();
+                }
+            } else {
+                // 右側にドロップ -> 分割表示
+                openInSplitView(tabPath);
+            }
             return true;
         }
 
-        // ★★★ ケース2: ファイルが外部からドロップされた場合 ★★★
+        // ケース2: ファイルが外部からドロップされた場合
         if (dataTransfer.files && dataTransfer.files.length > 0) {
             event.preventDefault();
             const imageFiles = [];
@@ -1978,9 +1986,8 @@ const dropHandler = EditorView.domEventHandlers({
                 }
             }
 
-            // 画像処理（既存コードのまま）
+            // 画像処理
             if (imageFiles.length > 0) {
-                // アクティブなエディタを取得（なければドロップされたエディタを使用）
                 const targetView = getActiveView() || view;
                 
                 if (!targetView.filePath || targetView.filePath === 'README.md') {
@@ -1997,7 +2004,6 @@ const dropHandler = EditorView.domEventHandlers({
                             const result = await window.electronAPI.saveClipboardImage(new Uint8Array(arrayBuffer), targetDir);
 
                             if (result.success) {
-                                // ドロップ位置に挿入するための計算
                                 const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
                                 const insertPos = pos !== null ? pos : targetView.state.selection.main.head;
                                 const insertText = `![image](${result.relativePath})\n`;
@@ -2006,7 +2012,7 @@ const dropHandler = EditorView.domEventHandlers({
                                     changes: { from: insertPos, insert: insertText },
                                     selection: { anchor: insertPos + insertText.length }
                                 });
-                                targetView.focus(); // フォーカスを戻す
+                                targetView.focus();
                                 showNotification('画像を保存しました', 'success');
                             } else {
                                 showNotification(`保存失敗: ${result.error}`, 'error');
@@ -2028,14 +2034,6 @@ const dropHandler = EditorView.domEventHandlers({
             return true;
         }
         
-        // ★★★ ケース3: Web画像のドロップ ★★★
-        const html = dataTransfer.getData('text/html');
-        if (html) {
-            // (Web画像の処理があればここに記述。なければ通知だけ)
-            // showNotification('Web画像のドロップを検知しました', 'info');
-            return true;
-        }
-
         return false;
     }
 });
