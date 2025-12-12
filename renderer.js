@@ -1956,18 +1956,25 @@ const dropHandler = EditorView.domEventHandlers({
         if (tabPath) {
             event.preventDefault();
 
-            // ドロップ先がメインエディタ(左)かスプリットエディタ(右)かを判定
-            if (view === globalEditorView) {
-                // 左側にドロップ -> 全画面(メイン)に戻す
-                setActiveEditor(globalEditorView);
-                switchToFile(tabPath);
-                if (isSplitView) {
-                    closeSplitView();
-                }
-            } else {
-                // 右側にドロップ -> 分割表示
+            // ▼▼▼ 修正箇所 ▼▼▼
+            if (!isSplitView) {
+                // まだ分割されていない場合 -> 分割して右側に表示
                 openInSplitView(tabPath);
+            } else {
+                // 既に分割されている場合
+                if (view === globalEditorView) {
+                    // 左側(メイン)にドロップ -> 左側で開く
+                    setActiveEditor(globalEditorView);
+                    switchToFile(tabPath);
+                    
+                    // 修正前: ここに closeSplitView() があったため、左にドロップすると右が閉じてしまっていた
+                    // 分割中は左右どちらにドロップしても分割を維持するように変更
+                } else {
+                    // 右側(スプリット)にドロップ -> 右側で開く（更新）
+                    openInSplitView(tabPath);
+                }
             }
+            // ▲▲▲ 修正箇所 ▲▲▲
             return true;
         }
 
