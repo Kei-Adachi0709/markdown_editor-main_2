@@ -234,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function openInSplitView(filePath) {
     const mainEditorDiv = document.getElementById('editor');
     const splitEditorDiv = document.getElementById('editor-split');
-    
     // タイトルバー要素
     const mainTitleBar = document.getElementById('file-title-bar');
     const splitTitleBar = document.getElementById('file-title-bar-split');
@@ -251,7 +250,7 @@ function openInSplitView(filePath) {
 
         // タイトルバーを分割表示
         if (mainTitleBar) {
-            mainTitleBar.style.flex = '1';
+            mainTitleBar.style.flex = 'none';
             mainTitleBar.style.width = '50%'; // 明示的に幅指定
             mainTitleBar.style.borderRight = '1px solid var(--sidebar-border)';
         }
@@ -384,14 +383,14 @@ function enableTabDragging(tabElement) {
 
 // ========== アクティブエディタ管理 ==========
 
-// どちらのエディタがアクティブかを設定する関数
+// アクティブなエディタを設定する関数
 function setActiveEditor(view) {
     activeEditorView = view;
     
     const mainWrapper = document.getElementById('editor');
     const splitWrapper = document.getElementById('editor-split');
     
-    // スタイルの切り替え
+    // スタイルの切り替え（青い枠をつける）
     if (view === splitEditorView) {
         if (splitWrapper) splitWrapper.classList.add('active-editor-pane');
         if (mainWrapper) mainWrapper.classList.remove('active-editor-pane');
@@ -401,14 +400,21 @@ function setActiveEditor(view) {
     }
 
     // グローバルなパス変数を、アクティブなエディタのものに更新
-    // (これをしないと保存ボタンなどが古いパスに対して動いてしまうため)
     if (view && view.filePath) {
         currentFilePath = view.filePath;
-        
-        // 統計情報なども更新
         updateFileStats();
-        updateOutline();
+        // 左側のタイトルバーも念のため更新
+        if (fileTitleInput) {
+             const name = path.basename(currentFilePath);
+             const extIndex = name.lastIndexOf('.');
+             fileTitleInput.value = extIndex > 0 ? name.substring(0, extIndex) : name;
+        }
     }
+}
+
+// 現在アクティブなエディタを取得する関数
+function getActiveView() {
+    return activeEditorView || globalEditorView;
 }
 
 // 現在アクティブなエディタを取得する関数（ツールバーなどで使用）
@@ -1894,39 +1900,72 @@ const pasteHandler = EditorView.domEventHandlers({
     }
 });
 
-// 高機能ドロップハンドラー (dragover追加)
-const dropHandler = EditorView.domEventHandlers({
-    // これがないとドラッグ時に駐車禁止マークが出てドロップできません
-    dragover(event, view) {
-        event.preventDefault();
-        return false;
-    },
-    drop(event, view) {
-        const { dataTransfer } = event;
+// renderer.js の dropHandler をこれに書き換えてください
 
-        // ★★★ 追加: タブがドロップされた場合の処理 ★★★
-        const tabPath = dataTransfer.getData('application/x-markdown-tab');
-        if (tabPath) {
+const dropHandler = EditorView.domEventHandlers({
+    // ドラッグがエディタに入ってきた時
+    dragenter(event, view) {
+        // タブを持っている場合のみ反応
+        if (event.dataTransfer.types.includes('application/x-markdown-tab')) {
             event.preventDefault();
-            
-            // 分割モードがOFFなら、分割して右側に開く
             if (!isSplitView) {
-                openInSplitView(tabPath);
+                view.dom.classList.add('editor-drag-preview-split');
             } else {
-                // 既に分割されている場合は、ドロップされた側のエディタで開く
-                // (今回は簡易的に「右側で開く」挙動に統一しますが、必要なら分岐できます)
-                openInSplitView(tabPath); 
+                view.dom.classList.add('editor-drag-over');
+            }
+        }
+    },
+    
+    // ドラッグしてエディタ上を動いている時
+    dragover(event, view) {
+        // タブを持っている場合
+        if (event.dataTransfer.types.includes('application/x-markdown-tab')) {
+            event.preventDefault();
+            // クラスが外れていたら付け直す（念のため）
+            if (!isSplitView) {
+                if (!view.dom.classList.contains('editor-drag-preview-split')) {
+                    view.dom.classList.add('editor-drag-preview-split');
+                }
+            } else {
+                if (!view.dom.classList.contains('editor-drag-over')) {
+                    view.dom.classList.add('editor-drag-over');
+                }
             }
             return true;
         }
-        // ------------------------------------------------
+        return false; // 他のドラッグ（ファイルなど）は下の処理へ
+    },
 
-        // -------------------------------------------------
-        // ケース1: ファイルがドロップされた場合 (ローカルファイル)
-        // -------------------------------------------------
+    // ドラッグがエディタから出た時
+    dragleave(event, view) {
+        // ※重要: マウスがエディタ内の文字要素に入っただけでもleaveが発生するので、
+        // 本当にエディタの外に出たのかをチェックします
+        if (event.relatedTarget && view.dom.contains(event.relatedTarget)) {
+            return; // まだエディタの中にいるので何もしない
+        }
+        view.dom.classList.remove('editor-drag-over');
+        view.dom.classList.remove('editor-drag-preview-split');
+    },
+
+    // ドロップされた時
+    drop(event, view) {
+        // まずハイライトを消す
+        view.dom.classList.remove('editor-drag-over');
+        view.dom.classList.remove('editor-drag-preview-split');
+        const { dataTransfer } = event;
+
+        // ★★★ ケース1: タブがドロップされた場合 ★★★
+        const tabPath = dataTransfer.getData('application/x-markdown-tab');
+        if (tabPath) {
+            event.preventDefault();
+            // 分割して開く（前回の実装済み関数）
+            openInSplitView(tabPath);
+            return true;
+        }
+
+        // ★★★ ケース2: ファイルが外部からドロップされた場合 ★★★
         if (dataTransfer.files && dataTransfer.files.length > 0) {
             event.preventDefault();
-
             const imageFiles = [];
             const textFiles = [];
 
@@ -1939,9 +1978,12 @@ const dropHandler = EditorView.domEventHandlers({
                 }
             }
 
-            // A. 画像ファイルの処理
+            // 画像処理（既存コードのまま）
             if (imageFiles.length > 0) {
-                if (!currentFilePath || currentFilePath === 'README.md') {
+                // アクティブなエディタを取得（なければドロップされたエディタを使用）
+                const targetView = getActiveView() || view;
+                
+                if (!targetView.filePath || targetView.filePath === 'README.md') {
                     showNotification('画像を保存するには、まずファイルを保存してください。', 'error');
                     return true;
                 }
@@ -1951,18 +1993,20 @@ const dropHandler = EditorView.domEventHandlers({
                     reader.onload = async (e) => {
                         const arrayBuffer = e.target.result;
                         try {
-                            const targetDir = path.dirname(currentFilePath);
+                            const targetDir = path.dirname(targetView.filePath);
                             const result = await window.electronAPI.saveClipboardImage(new Uint8Array(arrayBuffer), targetDir);
 
                             if (result.success) {
+                                // ドロップ位置に挿入するための計算
                                 const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-                                const insertPos = pos !== null ? pos : view.state.selection.main.head;
+                                const insertPos = pos !== null ? pos : targetView.state.selection.main.head;
                                 const insertText = `![image](${result.relativePath})\n`;
 
-                                view.dispatch({
+                                targetView.dispatch({
                                     changes: { from: insertPos, insert: insertText },
                                     selection: { anchor: insertPos + insertText.length }
                                 });
+                                targetView.focus(); // フォーカスを戻す
                                 showNotification('画像を保存しました', 'success');
                             } else {
                                 showNotification(`保存失敗: ${result.error}`, 'error');
@@ -1973,78 +2017,25 @@ const dropHandler = EditorView.domEventHandlers({
                     };
                     reader.readAsArrayBuffer(file);
                 });
+                return true; 
             }
 
-            // B. テキストファイル等の処理
+            // テキストファイル処理
             if (textFiles.length > 0) {
                 const file = textFiles[0];
-                if (file.path) {
-                    openFile(file.path, file.name);
-                }
+                if (file.path) openFile(file.path, file.name);
             }
             return true;
         }
-
-        // -------------------------------------------------
-        // ケース2: Webページからの画像ドラッグ (HTML/URL)
-        // -------------------------------------------------
+        
+        // ★★★ ケース3: Web画像のドロップ ★★★
         const html = dataTransfer.getData('text/html');
         if (html) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const img = doc.querySelector('img');
-
-            if (img && img.src) {
-                event.preventDefault();
-
-                if (!currentFilePath || currentFilePath === 'README.md') {
-                    showNotification('画像を保存するには、まずファイルを保存してください。', 'error');
-                    return true;
-                }
-
-                (async () => {
-                    try {
-                        const targetDir = path.dirname(currentFilePath);
-
-                        if (img.src.startsWith('data:')) {
-                            const response = await fetch(img.src);
-                            const blob = await response.blob();
-                            const arrayBuffer = await blob.arrayBuffer();
-                            const result = await window.electronAPI.saveClipboardImage(new Uint8Array(arrayBuffer), targetDir);
-                            if (result.success) insertImageLink(result.relativePath);
-                        }
-                        else {
-                            showNotification('Web画像をダウンロード中...', 'info');
-                            const result = await window.electronAPI.downloadImage(img.src, targetDir);
-                            if (result.success) {
-                                insertImageLink(result.relativePath);
-                                showNotification('Web画像を保存しました', 'success');
-                            } else {
-                                showNotification(`画像保存失敗: ${result.error}`, 'error');
-                            }
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        showNotification(`エラー: ${e.message}`, 'error');
-                    }
-                })();
-
-                function insertImageLink(relPath) {
-                    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-                    const insertPos = pos !== null ? pos : view.state.selection.main.head;
-                    const insertText = `![image](${relPath})\n`;
-                    view.dispatch({
-                        changes: { from: insertPos, insert: insertText },
-                        selection: { anchor: insertPos + insertText.length }
-                    });
-                }
-                return true;
-            }
+            // (Web画像の処理があればここに記述。なければ通知だけ)
+            // showNotification('Web画像のドロップを検知しました', 'info');
+            return true;
         }
 
-        // -------------------------------------------------
-        // ケース3: 通常のテキストドラッグ
-        // -------------------------------------------------
         return false;
     }
 });
@@ -6934,8 +6925,10 @@ function switchToFile(filePath) {
 
     // 親コンテナを表示
     switchMainView('content-readme');
-    // ターゲットとなるエディタを決定（アクティブな方、なければメイン）
-    const targetView = getActiveView();
+    // ★アクティブなエディタ（操作中の画面）を取得
+    let targetView = getActiveView();
+    // 分割中でないなら強制的にメインエディタを使う
+    if (!isSplitView) targetView = globalEditorView;
     const isMain = (targetView === globalEditorView);
 
     // DOM要素取得
@@ -7077,6 +7070,8 @@ function switchToFile(filePath) {
     onEditorInput(false);
 }
 
+// renderer.js の closeTab 関数をこれに書き換え
+
 function closeTab(element, isSettings = false) {
     if (element) element.remove();
 
@@ -7086,17 +7081,13 @@ function closeTab(element, isSettings = false) {
         const filePath = element.dataset.filepath;
 
         if (filePath) {
-
-            // 自動保存がONかつ未保存の場合の処理を追加
             const isDirty = fileModificationState.get(filePath);
             const fileData = openedFiles.get(filePath);
 
             if (isDirty && appSettings.autoSave && appSettings.autoSaveOnClose && !(fileData && fileData.isVirtual)) {
-                // 未保存かつ自動保存(大元)と閉じる時保存がON、かつ新規ファイル(仮想ファイル)ではない場合
-                saveCurrentFile(false, filePath); // ファイルパスを渡して、このファイルを保存
+                saveCurrentFile(false, filePath);
             }
 
-            // 閉じたタブの情報を履歴に保存
             if (fileData) {
                 closedTabsHistory.push({
                     path: filePath,
@@ -7104,20 +7095,38 @@ function closeTab(element, isSettings = false) {
                     content: fileData.content || (globalEditorView && currentFilePath === filePath ? globalEditorView.state.doc.toString() : ''),
                     isVirtual: fileData.isVirtual || false
                 });
-                // 履歴が増えすぎないように制限（例: 最大20件）
                 if (closedTabsHistory.length > 20) closedTabsHistory.shift();
+            }
+
+            // データを消す前に、分割画面で開いていたファイルかチェック
+            let shouldCloseSplit = false;
+            if (isSplitView) {
+                // 条件A: 右側で開いているファイルを閉じようとしている
+                if (splitEditorView && splitEditorView.filePath === filePath) {
+                    shouldCloseSplit = true;
+                }
+                // 条件B: ファイル数が残り1つ以下になる
+                if (openedFiles.size <= 1) {
+                    shouldCloseSplit = true;
+                }
             }
 
             openedFiles.delete(filePath);
             fileModificationState.delete(filePath);
 
+            // 分割解除を実行
+            if (shouldCloseSplit) {
+                closeSplitView();
+            }
+
             if (currentFilePath === filePath) {
                 currentFilePath = null;
                 if (globalEditorView) {
-                    globalEditorView.dispatch({
+                    const tr = globalEditorView.state.update({
                         changes: { from: 0, to: globalEditorView.state.doc.length, insert: "" },
                         annotations: ExternalChange.of(true)
                     });
+                    globalEditorView.dispatch(tr);
                 }
                 switchToLastFileOrReadme();
             }

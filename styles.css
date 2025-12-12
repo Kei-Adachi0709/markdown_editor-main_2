@@ -3990,3 +3990,37 @@ body[data-theme="dark"] .cm-content .cm-highlightSpace {
     box-shadow: inset 0 0 0 2px #007acc !important; /* 青い枠線 */
     transition: box-shadow 0.2s;
 }
+
+/* --- ドラッグ＆ドロップ時のハイライト演出 --- */
+
+/* ケース1: まだ分割されていない時（右半分だけ光らせる） */
+.cm-editor.editor-drag-preview-split::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0; /* 右寄せ */
+    width: 50%; /* 幅50% */
+    height: 100%;
+    /* 好みの青色（薄め） */
+    background-color: rgba(83, 156, 255, 0.2);
+    border: 3px solid #539cff;
+    border-left: 2px dashed #539cff; /* 境界線を破線にしてみる */
+    z-index: 500;
+    pointer-events: none;
+    box-sizing: border-box;
+}
+
+/* ケース2: 既に分割されている時（そのエディタ全体を光らせる） */
+.cm-editor.editor-drag-over::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(83, 156, 255, 0.2);
+    border: 3px solid #539cff;
+    z-index: 500;
+    pointer-events: none;
+    box-sizing: border-box;
+}
