@@ -402,6 +402,86 @@ function getActiveView() {
     return activeEditorView || globalEditorView;
 }
 
+// ========== 【修正版】タブ消滅時の全画面復帰処理 (左右対応) ==========
+
+document.addEventListener('click', (e) => {
+    // 閉じるボタン(×)が押されたかチェック
+    if (e.target.classList.contains('close-tab')) {
+        
+        // どのタブコンテナ（左か右か）の中にあるボタンか特定
+        // 閉じるボタン -> タブ -> 親のコンテナ
+        const tabElement = e.target.closest('.tab');
+        const tabsContainer = tabElement ? tabElement.parentElement : null;
+
+        // 処理完了待ち (DOMから消えるのを待つ)
+        setTimeout(() => {
+            if (!tabsContainer) return;
+
+            // コンテナの中身が空っぽになったか確認
+            if (tabsContainer.children.length === 0) {
+                console.log('タブが空になりました。レイアウトを調整します。');
+                
+                // 1. 親要素を辿って、これが「左側」か「右側」か判定する
+                // ※ .center-pane, #editor-container などのクラス/IDで判定
+                const isLeft = tabsContainer.closest('.center-pane') || tabsContainer.closest('#editor-container') || tabsContainer.id === 'editor-tabs';
+                const isRight = tabsContainer.closest('.right-pane') || tabsContainer.closest('#preview-pane');
+
+                // 2. 状況に応じてレイアウトを変更
+                if (isLeft) {
+                    // 左が空になった -> 左を隠して、右を全画面に
+                    // (ただし、右も空なら何もしない、あるいはウェルカム画面)
+                    handlePaneClose('left');
+                } else if (isRight) {
+                    // 右が空になった -> 右を隠して、左を全画面に
+                    handlePaneClose('right');
+                }
+            }
+        }, 100);
+    }
+});
+
+// ペインを閉じて全画面化する関数
+function handlePaneClose(emptySide) {
+    const leftPane = document.querySelector('.center-pane') || document.getElementById('editor-container');
+    const rightPane = document.querySelector('.right-pane') || document.getElementById('preview-pane');
+    const resizer = document.querySelector('.resizer') || document.getElementById('resizer-right');
+
+    if (emptySide === 'left') {
+        // 左を隠す
+        if (leftPane) {
+            leftPane.style.display = 'none';
+            leftPane.style.width = '0px';
+        }
+        // 右を全画面化
+        if (rightPane) {
+            rightPane.style.display = 'block'; // 表示
+            rightPane.style.width = '100%';
+            rightPane.style.flex = '1';
+        }
+        
+    } else if (emptySide === 'right') {
+        // 右を隠す
+        if (rightPane) {
+            rightPane.style.display = 'none';
+            rightPane.style.width = '0px';
+        }
+        // 左を全画面化
+        if (leftPane) {
+            leftPane.style.display = 'block'; // 表示
+            leftPane.style.width = '100%';
+            leftPane.style.flex = '1';
+            leftPane.style.marginRight = '0px'; // マージンリセット
+        }
+        // CSS変数もリセット
+        document.documentElement.style.setProperty('--right-pane-width', '0px');
+    }
+
+    // リサイズバーはどちらの場合も隠す（分割していないので）
+    if (resizer) {
+        resizer.style.display = 'none';
+    }
+}
+
 // ========== Command Registry ==========
 const COMMANDS_REGISTRY = [
     // --- Global Commands ---
