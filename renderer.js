@@ -1956,7 +1956,6 @@ const dropHandler = EditorView.domEventHandlers({
         if (tabPath) {
             event.preventDefault();
 
-            // ▼▼▼ 修正箇所 ▼▼▼
             if (!isSplitView) {
                 // まだ分割されていない場合 -> 分割して右側に表示
                 openInSplitView(tabPath);
@@ -1967,19 +1966,25 @@ const dropHandler = EditorView.domEventHandlers({
                     setActiveEditor(globalEditorView);
                     switchToFile(tabPath);
                     
-                    // 修正前: ここに closeSplitView() があったため、左にドロップすると右が閉じてしまっていた
-                    // 分割中は左右どちらにドロップしても分割を維持するように変更
+                    // ▼▼▼ 修正箇所 ▼▼▼
+                    // 右側で開いているファイルと同じファイルを左側にドロップした場合、
+                    // 「統合（移動）」の意図とみなして分割を解除する
+                    if (splitEditorView && splitEditorView.filePath === tabPath) {
+                        closeSplitView();
+                    }
+                    // ▲▲▲ 修正箇所 ▲▲▲
+
                 } else {
                     // 右側(スプリット)にドロップ -> 右側で開く（更新）
                     openInSplitView(tabPath);
                 }
             }
-            // ▲▲▲ 修正箇所 ▲▲▲
             return true;
         }
 
         // ケース2: ファイルが外部からドロップされた場合
         if (dataTransfer.files && dataTransfer.files.length > 0) {
+            // ... (ここの中身は既存のコードのまま変更なし) ...
             event.preventDefault();
             const imageFiles = [];
             const textFiles = [];
@@ -5778,18 +5783,36 @@ document.addEventListener('mousemove', (e) => {
 
     if (isResizingRight && resizerRight) {
         const rightActivityBarWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--activitybar-width')) || 50;
-        const newWidth = window.innerWidth - e.clientX - rightActivityBarWidth;
+        // マウス位置から計算した「なりたい幅」
+        let newWidth = window.innerWidth - e.clientX - rightActivityBarWidth;
+        
+        // ★ここから修正: スナップ（吸着）処理を追加
 
-        if (newWidth > 100 && newWidth < 800) {
-            rightPane.style.width = newWidth + 'px';
-            resizerRight.style.right = (newWidth + rightActivityBarWidth) + 'px';
-            document.documentElement.style.setProperty('--right-pane-width', newWidth + 'px');
-            const mainContent = centerPane.parentElement;
-            mainContent.style.marginRight = (newWidth + rightActivityBarWidth) + 'px';
+        const SNAP_THRESHOLD = 150; // このピクセルより小さくしたら閉じる
+        const MAX_WIDTH = 800;      // 最大幅
 
-            if (activeTerminalId) {
-                requestAnimationFrame(() => fitTerminal(activeTerminalId));
-            }
+        // A. 閾値より小さい場合 -> 強制的に閉じる (幅0)
+        if (newWidth < SNAP_THRESHOLD) {
+            newWidth = 0;
+            rightPane.style.display = 'none'; // 完全に隠す（必要に応じて）
+        } 
+        // B. それ以外 -> 通常のリサイズ
+        else {
+            rightPane.style.display = 'block'; // 再表示する
+            if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH; // 最大幅制限
+        }
+
+        // 幅の適用（0px または 計算された幅）
+        // ※ newWidth が 0 の場合もここで適用されるようになります
+        rightPane.style.width = newWidth + 'px';
+        resizerRight.style.right = (newWidth + rightActivityBarWidth) + 'px';
+        document.documentElement.style.setProperty('--right-pane-width', newWidth + 'px');
+        
+        const mainContent = centerPane.parentElement;
+        mainContent.style.marginRight = (newWidth + rightActivityBarWidth) + 'px';
+
+        if (activeTerminalId) {
+            requestAnimationFrame(() => fitTerminal(activeTerminalId));
         }
     }
 
