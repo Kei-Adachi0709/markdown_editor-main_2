@@ -7211,7 +7211,7 @@ function switchToFile(filePath, targetPane = 'left') {
     onEditorInput(false);
 }
 
-// renderer.js の closeTab 関数をこれに書き換え
+// renderer.js
 
 function closeTab(element, isSettings = false) {
     if (element) element.remove();
@@ -7246,8 +7246,9 @@ function closeTab(element, isSettings = false) {
                 if (splitEditorView && splitEditorView.filePath === filePath) {
                     shouldCloseSplit = true;
                 }
-                // 条件B: ファイル数が残り1つ以下になる
-                if (openedFiles.size <= 1) {
+                // 条件B: ファイル数が残り2つ以下になる場合、今回1つ消すと残り1つになるため分割を解除する
+                // 【修正箇所】 <= 1 を <= 2 に変更
+                if (openedFiles.size <= 2) {
                     shouldCloseSplit = true;
                 }
             }
