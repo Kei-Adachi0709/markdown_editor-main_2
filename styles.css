@@ -964,6 +964,19 @@ body[data-theme="dark"] .git-action-btn-small:hover {
     border-bottom: 2px solid var(--sidebar-border);
 }
 
+/* 右側（分割画面）のファイルタイトル用スタイル */
+#file-title-split-text {
+    font-size: 1.5em;       /* 左側と同じサイズ */
+    font-weight: bold;      /* 左側と同じ太さ */
+    color: var(--text-color);
+    width: 100%;
+    text-align: center;     /* 中央揃え */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
 /* Toolbar */
 .toolbar {
     padding: 4px 8px;
@@ -2027,6 +2040,27 @@ body[data-theme="dark"] .cm-language-item:hover {
 /* 左ペインが隠れているときはリサイザーも隠す */
 .ide-container.left-pane-hidden #resizer-left {
     display: none;
+}
+
+/* エディタ分割用のリサイザー */
+#resizer-editor-split {
+    width: 6px; /* つかみやすい幅に設定 */
+    cursor: col-resize;
+    background-color: var(--main-bg); /* 通常時は背景色と同じ */
+    border-left: 1px solid var(--sidebar-border); /* 境界線を表示 */
+    z-index: 10;
+    flex-shrink: 0; /* 縮まないようにする */
+    transition: background-color 0.2s;
+}
+
+#resizer-editor-split:hover,
+#resizer-editor-split.resizing {
+    background-color: #007acc; /* ホバー時・ドラッグ時は青くする */
+}
+
+/* 分割していないときは隠す */
+#resizer-editor-split.hidden {
+    display: none !important;
 }
 
 /* ========== Status Bar ========== */

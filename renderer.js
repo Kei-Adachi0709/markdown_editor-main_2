@@ -92,6 +92,7 @@ const rightActivityBar = document.querySelector('.right-activity-bar');
 const bottomPane = document.getElementById('bottom-pane');
 const centerPane = document.getElementById('center-pane');
 const btnCalendar = document.getElementById('btn-calendar');
+const resizerEditorSplit = document.getElementById('resizer-editor-split');
 
 // トップバー操作
 const btnToggleLeftPane = document.getElementById('btn-toggle-leftpane');
@@ -176,6 +177,7 @@ let isTerminalVisible = false;
 let isRightActivityBarVisible = true;
 let isMaximized = false;
 let savedRightActivityBarState = true;
+let isResizingEditorSplit = false;
 // ★★★ 追加: 現在アクティブなエディタを保持する変数 ★★★
 let activeEditorView = null;
 
@@ -236,6 +238,12 @@ function openInSplitView(filePath) {
         mainEditorDiv.style.width = '50%';
         splitEditorDiv.style.display = 'block';
         splitEditorDiv.style.width = '50%';
+
+        // ★ リサイザーを表示し、既存のボーダーを消す
+        if (resizerEditorSplit) {
+            resizerEditorSplit.classList.remove('hidden');
+        }
+        splitEditorDiv.style.borderLeft = 'none';
 
         // タイトルバーを分割表示
         if (mainTitleBar) {
@@ -304,6 +312,11 @@ function closeSplitView() {
     splitEditorDiv.style.display = 'none';
     splitEditorDiv.style.width = '0%';
 
+    // ★ リサイザーを非表示
+    if (resizerEditorSplit) {
+        resizerEditorSplit.classList.add('hidden');
+    }
+
     // タイトルバーを元に戻す
     if (mainTitleBar) {
         mainTitleBar.style.width = '100%';
@@ -313,6 +326,72 @@ function closeSplitView() {
         splitTitleBar.style.display = 'none';
     }
 }
+
+// --- エディタ分割リサイザーのイベント ---
+
+if (resizerEditorSplit) {
+    resizerEditorSplit.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // テキスト選択などを防止
+        isResizingEditorSplit = true;
+        resizerEditorSplit.classList.add('resizing');
+        // ドラッグ中は他の要素（iframeなど）がマウスイベントを奪わないようにする
+        document.body.classList.add('is-resizing-col'); // カーソル固定用クラス
+    });
+}
+
+// 既存の mousemove イベント内に追加、または新規に追加
+document.addEventListener('mousemove', (e) => {
+    // ... (既存のリサイズ処理) ...
+
+    // ★ ここに追加: エディタ分割のリサイズ処理
+    if (isResizingEditorSplit && isSplitView) {
+        const wrapper = document.getElementById('editor-wrapper');
+        const mainEditorDiv = document.getElementById('editor');
+        const splitEditorDiv = document.getElementById('editor-split');
+        const mainTitleBar = document.getElementById('file-title-bar');
+        const splitTitleBar = document.getElementById('file-title-bar-split');
+
+        if (!wrapper) return;
+
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const wrapperWidth = wrapperRect.width;
+        
+        // マウス位置の相対座標（ラッパー左端からの距離）
+        let newLeftWidth = e.clientX - wrapperRect.left;
+
+        // 最小幅制限 (例えば 100px)
+        if (newLeftWidth < 100) newLeftWidth = 100;
+        if (newLeftWidth > wrapperWidth - 100) newLeftWidth = wrapperWidth - 100;
+
+        // パーセント計算
+        const leftPercent = (newLeftWidth / wrapperWidth) * 100;
+        const rightPercent = 100 - leftPercent;
+
+        // エディタ幅の適用
+        mainEditorDiv.style.width = `${leftPercent}%`;
+        splitEditorDiv.style.width = `${rightPercent}%`;
+
+        // タイトルバー幅の適用（同期させる）
+        if (mainTitleBar) mainTitleBar.style.width = `${leftPercent}%`;
+        if (splitTitleBar) splitTitleBar.style.width = `${rightPercent}%`;
+    }
+});
+
+// 既存の mouseup イベント内に追加、または新規に追加
+document.addEventListener('mouseup', () => {
+    // ... (既存のリサイズ終了処理) ...
+
+    // ★ ここに追加
+    if (isResizingEditorSplit) {
+        isResizingEditorSplit = false;
+        if (resizerEditorSplit) resizerEditorSplit.classList.remove('resizing');
+        document.body.classList.remove('is-resizing-col');
+        
+        // CodeMirrorの表示崩れを防ぐためにリフレッシュ
+        if (globalEditorView) globalEditorView.requestMeasure();
+        if (splitEditorView) splitEditorView.requestMeasure();
+    }
+});
 
 // ========== タブ移動（ドラッグ＆ドロップ）機能 ==========
 
@@ -5823,33 +5902,34 @@ if (resizerBottom) {
 
 document.addEventListener('mousemove', (e) => {
 
+    // ▼▼▼ 左側のリサイズ処理 (ここを修正) ▼▼▼
     if (isResizingLeft && resizerLeft) {
-        const activityBarWidth = 50; // CSS変数の値と合わせる
-        // マウス位置からアクティビティバーの幅を引いてサイドバーの幅を算出
+        e.preventDefault();
+        
+        // アクティビティバーの幅を取得（CSS変数から取得、デフォルト50px）
+        const activityBarWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--activitybar-width')) || 50;
+        
+        // マウス位置からサイドバーの幅を計算
         let newWidth = e.clientX - activityBarWidth;
 
-        // 最小幅・最大幅の制限 (例: 150px ~ 600px)
-        if (newWidth < 160) newWidth = 160;
-        if (newWidth > 600) newWidth = 600;
+        // 幅の制限設定 (最小150px, 最大800px)
+        const MIN_WIDTH = 150;
+        const MAX_WIDTH = 800;
+
+        // 範囲内に収める
+        if (newWidth < MIN_WIDTH) newWidth = MIN_WIDTH;
+        if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
+
         const widthStr = newWidth + 'px';
-        // CSS変数を更新して幅を変更
+        
+        // CSS変数を更新して幅を適用
+        // これにより styles.css の var(--leftpane-width) が更新され、実際の幅が変わります
         document.documentElement.style.setProperty('--leftpane-width', widthStr);
-        // トップバーの左側コントロール幅も同期させる
+        
+        // トップバー左側のコントロール部分の幅も同期
         document.documentElement.style.setProperty('--current-left-pane-width', widthStr);
-        // 左側のリサイズ処理、または閉じるボタンの処理内
-
-if (newWidth <= 0) {
-    // 左側を完全に隠す
-    leftPane.style.width = '0px';
-    leftPane.style.display = 'none'; // 完全に消す
-
-    // ★ここが重要：右側（メインコンテンツ）を全画面に広げる
-    // もし右側が absolute配置なら left: 0; width: 100%;
-    // もし flexboxなら flex: 1; など
-    rightPane.style.width = '100%'; 
-    rightPane.style.marginLeft = '0px'; // マージンをリセット
-}
     }
+    // ▲▲▲ 左側のリサイズ処理 ここまで ▲▲▲
 
     if (isResizingRight && resizerRight) {
         const rightActivityBarWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--activitybar-width')) || 50;
