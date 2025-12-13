@@ -363,6 +363,8 @@ function enableTabDragging(tabElement) {
 
 // ========== アクティブエディタ管理 ==========
 
+// renderer.js
+
 // アクティブなエディタを設定する関数
 function setActiveEditor(view) {
     activeEditorView = view;
@@ -383,12 +385,9 @@ function setActiveEditor(view) {
     if (view && view.filePath) {
         currentFilePath = view.filePath;
         updateFileStats();
-        // 左側のタイトルバーも念のため更新
-        if (fileTitleInput) {
-             const name = path.basename(currentFilePath);
-             const extIndex = name.lastIndexOf('.');
-             fileTitleInput.value = extIndex > 0 ? name.substring(0, extIndex) : name;
-        }
+        
+        // 【修正】左側のタイトルバーを更新する処理を削除しました。
+        // これにより、右側を触っても左側のタイトルが維持されます。
     }
 }
 
@@ -7022,15 +7021,6 @@ function switchToFile(filePath, targetPane = 'left') {
     const fileData = openedFiles.get(filePath);
     if (!fileData) return;
 
-    if (targetPane === 'right') {
-        // 右側のエディタにセットする処理
-        // 例: rightEditor.setValue(fileData.content);
-        // 例: document.getElementById('right-preview').innerHTML = ...
-    } else {
-        // 左側（メイン）のエディタにセットする処理
-        // 例: editor.setValue(fileData.content);
-    }
-
     // 1. 現在開いているファイルの状態を保存する (テキストファイルの場合のみ)
     if (previouslyActivePath && globalEditorView && openedFiles.has(previouslyActivePath)) {
         const currentFileData = openedFiles.get(previouslyActivePath);
@@ -7066,18 +7056,24 @@ function switchToFile(filePath, targetPane = 'left') {
 
     // 親コンテナを表示
     switchMainView('content-readme');
-    // ★アクティブなエディタ（操作中の画面）を取得
-    let targetView = getActiveView();
-    // 分割中でないなら強制的にメインエディタを使う
-    if (!isSplitView) targetView = globalEditorView;
+
+    // 【修正】ターゲットエディタの決定ロジックを変更
+    // getActiveView() ではなく、引数 targetPane を優先して使用します。
+    let targetView;
+    if (!isSplitView) {
+        targetView = globalEditorView;
+    } else {
+        if (targetPane === 'right') {
+            targetView = splitEditorView;
+        } else {
+            targetView = globalEditorView;
+        }
+    }
     const isMain = (targetView === globalEditorView);
 
     // DOM要素取得
     const splitTitleText = document.getElementById('file-title-split-text'); // 右用
     const fileTitleInput = document.getElementById('file-title-input'); // 左入力欄
-
-    // 親コンテナを表示
-    switchMainView('content-readme');
 
     // ファイル情報取得
     currentFilePath = filePath; // グローバル変数を更新
@@ -7158,17 +7154,6 @@ function switchToFile(filePath, targetPane = 'left') {
                 fileTitleBarEl.classList.remove('hidden');
             }
         }
-
-        // エディタの状態復元
-        if (globalEditorView) {
-            if (fileData && fileData.editorState) {
-                globalEditorView.setState(fileData.editorState);
-            } else {
-                const fileContent = fileData ? fileData.content : '';
-                const newState = createEditorState(fileContent, filePath);
-                globalEditorView.setState(newState);
-            }
-        }
     } else {
         // メディアモード (画像/PDF)
         if (editorEl) editorEl.style.display = 'none';
@@ -7181,15 +7166,6 @@ function switchToFile(filePath, targetPane = 'left') {
 
         // メディア描画
         renderMediaContent(filePath, fileType);
-    }
-
-    // --- UI更新処理 ---
-    // 仮想README.mdではないテキストファイルの場合のみタイトル入力欄を更新
-    if (fileType === 'text' && !isVirtualReadme && fileTitleInput) {
-        const fileName = fileData ? fileData.fileName : filePath.split(/[\/\\]/).pop();
-        const extIndex = fileName.lastIndexOf('.');
-        const fileNameWithoutExt = extIndex > 0 ? fileName.substring(0, extIndex) : fileName;
-        fileTitleInput.value = fileNameWithoutExt;
     }
 
     updateOutline();
