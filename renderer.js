@@ -234,15 +234,16 @@ function openInSplitView(filePath) {
     if (!isSplitView) {
         isSplitView = true;
         
-        // エディタエリアを分割
-        mainEditorDiv.style.width = '50%';
+        // ★ エディタエリアを分割（リサイザーの幅6pxを考慮して半分ずつにする）
+        mainEditorDiv.style.width = 'calc(50% - 3px)';
         splitEditorDiv.style.display = 'block';
-        splitEditorDiv.style.width = '50%';
+        splitEditorDiv.style.width = 'calc(50% - 3px)';
 
         // ★ リサイザーを表示し、既存のボーダーを消す
         if (resizerEditorSplit) {
             resizerEditorSplit.classList.remove('hidden');
         }
+        // ボーダーはCSSで制御するため、JSでの操作は不要、もしくはリセット
         splitEditorDiv.style.borderLeft = 'none';
 
         // タイトルバーを分割表示
@@ -359,21 +360,27 @@ document.addEventListener('mousemove', (e) => {
         // マウス位置の相対座標（ラッパー左端からの距離）
         let newLeftWidth = e.clientX - wrapperRect.left;
 
+        // リサイザーの幅（CSSで6pxに設定されている想定）
+        const resizerWidth = 6;
+
         // 最小幅制限 (例えば 100px)
         if (newLeftWidth < 100) newLeftWidth = 100;
         if (newLeftWidth > wrapperWidth - 100) newLeftWidth = wrapperWidth - 100;
 
-        // パーセント計算
-        const leftPercent = (newLeftWidth / wrapperWidth) * 100;
-        const rightPercent = 100 - leftPercent;
+        // ★ リサイザーの幅を考慮してパーセント計算
+        // 左側の幅ピクセルを直接スタイルに適用（計算精度のためpx指定を推奨）
+        const leftWidthPx = newLeftWidth;
+        const rightWidthPx = wrapperWidth - newLeftWidth - resizerWidth;
 
-        // エディタ幅の適用
-        mainEditorDiv.style.width = `${leftPercent}%`;
-        splitEditorDiv.style.width = `${rightPercent}%`;
+        // エディタ幅の適用 (px指定の方が計算ズレが少ないです)
+        mainEditorDiv.style.width = `${leftWidthPx}px`;
+        splitEditorDiv.style.width = `${rightWidthPx}px`;
 
         // タイトルバー幅の適用（同期させる）
-        if (mainTitleBar) mainTitleBar.style.width = `${leftPercent}%`;
-        if (splitTitleBar) splitTitleBar.style.width = `${rightPercent}%`;
+        // タイトルバーにはリサイザーがないため、純粋な比率で分割するか、上記と同じpx幅を適用
+        if (mainTitleBar) mainTitleBar.style.width = `${leftWidthPx}px`;
+        // 右側タイトルバーは残り幅全部を使うように flex: 1 にするか、計算して適用
+        if (splitTitleBar) splitTitleBar.style.width = `${rightWidthPx + resizerWidth}px`; // タイトルバー側は隙間を埋めるため少し広めに
     }
 });
 
